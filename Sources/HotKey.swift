@@ -132,11 +132,31 @@ enum PasswordCheck {
     }
 }
 
-/// The Touch ID indicator embedded in StayPut's own window.
+/// The Touch ID indicator embedded in Guard's own window.
 struct TouchIDView: NSViewRepresentable {
     let context: LAContext
-    func makeNSView(context ctx: Context) -> LAAuthenticationView {
-        LAAuthenticationView(context: context, controlSize: .small)
+    var onReady: (LAContext) -> Void
+
+    func makeNSView(context ctx: Context) -> EmbeddedTouchIDView {
+        let view = EmbeddedTouchIDView(context: context, controlSize: .small)
+        view.onReady = onReady
+        return view
     }
-    func updateNSView(_ view: LAAuthenticationView, context ctx: Context) {}
+    func updateNSView(_ view: EmbeddedTouchIDView, context ctx: Context) {
+        view.onReady = onReady
+    }
+}
+
+/// Evaluate only after AppKit has attached the authentication view to a window.
+final class EmbeddedTouchIDView: LAAuthenticationView {
+    var onReady: ((LAContext) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.window != nil else { return }
+            self.onReady?(self.context)
+        }
+    }
 }

@@ -161,6 +161,7 @@ struct OverlayView: View {
                 Text("Movement, the lid and the display angle are monitored.\nMoving it will sound an alarm.")
                     .multilineTextAlignment(.center)
                     .font(.title2).opacity(0.65)
+                    .fixedSize(horizontal: false, vertical: true)
             case .warning(let reason):
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 96))
@@ -187,7 +188,7 @@ struct OverlayView: View {
     @ViewBuilder private var footer: some View {
         ZStack {
             HStack {
-                Text("StayPut").font(.headline).opacity(0.4)
+                Text("Guard").font(.headline).opacity(0.4)
                 Spacer()
                 if settings.requireAuth {
                     Button {
@@ -201,22 +202,29 @@ struct OverlayView: View {
                     .focusable(false) // no blue focus ring when the lock screen appears
                 }
             }
-            // Touch ID is always listening: the owner just touches the sensor.
-            if isPrimary, settings.requireAuth, let ctx = controller.touchIDContext {
+            // Keep the indicator visible when unavailable, with a password fallback.
+            if isPrimary, settings.requireAuth {
                 VStack(spacing: 8) {
                     ZStack {
                         // The real Touch ID view only comes in fixed sizes (32 or 64 pt) and
                         // cropping/scaling it breaks it, so it sits underneath a 48 pt glyph.
-                        TouchIDView(context: ctx)
-                            .frame(width: 32, height: 32)
+                        if let ctx = controller.touchIDContext {
+                            TouchIDView(context: ctx, onReady: controller.touchIDViewDidAttach)
+                                .frame(width: 32, height: 32)
+                                .id(ObjectIdentifier(ctx))
+                        }
                         Image(systemName: "touchid")
                             .font(.system(size: 40, weight: .regular))
-                            .foregroundStyle(Color(red: 0.93, green: 0.30, blue: 0.40))
+                            .foregroundStyle(controller.touchIDContext != nil
+                                             ? Color(red: 0.93, green: 0.30, blue: 0.40)
+                                             : Color(white: 0.55))
                             .frame(width: 60, height: 60)
                             .background(Circle().fill(Color(red: 0.04, green: 0.04, blue: 0.05)))
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
                     }
-                        .id(ObjectIdentifier(ctx))
-                    Text("Touch ID to unlock").font(.headline).opacity(0.85)
+                    Text(controller.touchIDContext != nil ? "Touch ID to unlock" : "Touch ID unavailable")
+                        .font(.headline).opacity(0.85)
                 }
             }
         }
@@ -232,11 +240,12 @@ struct UnlockPanel: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Text("Unlock StayPut").font(.title2.weight(.semibold))
+            Text("Unlock Guard").font(.title2.weight(.semibold))
             Text(controller.touchIDContext != nil
                  ? "Enter your Mac password, or just touch Touch ID."
-                 : "Enter your Mac password.")
+                 : "Touch ID is unavailable. Enter your Mac password.")
                 .font(.callout).opacity(0.8)
+                .multilineTextAlignment(.center)
             HStack(spacing: 10) {
                 SecureField("Mac password", text: $password)
                     .textFieldStyle(.roundedBorder)

@@ -30,7 +30,7 @@ struct SettingsView: View {
                 MotionMeter(controller: controller, thresholds: Thresholds(sensitivity: settings.sensitivity))
                 sensorStatus
                 if !controller.motionAvailable {
-                    Text("This Mac has no motion sensor, so StayPut can't protect it. StayPut needs a MacBook with Apple silicon (M1 or newer).")
+                    Text("This Mac has no motion sensor, so Guard can't protect it. Guard needs a MacBook with Apple silicon (M1 or newer).")
                         .font(.caption).foregroundStyle(.red)
                 }
             }
@@ -65,7 +65,7 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Open StayPut at login", isOn: $launchAtLogin)
+                Toggle("Open Guard at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { on in
                         do {
                             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }

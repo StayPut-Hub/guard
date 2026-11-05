@@ -24,7 +24,7 @@ final class GuardController: ObservableObject {
     static let shared = GuardController()
 
     @Published private(set) var state: GuardState = .idle {
-        didSet { if state != oldValue { NSLog("StayPut state: %@", String(describing: state)) } }
+        didSet { if state != oldValue { NSLog("Guard state: %@", String(describing: state)) } }
     }
     @Published private(set) var motionLevel = 0.0      // g, for the live meter
     @Published private(set) var tiltDegrees = 0.0
@@ -37,6 +37,48 @@ final class GuardController: ObservableObject {
     @Published private(set) var unlockError: String?
     @Published private(set) var checkingPassword = false
     private var unlockTimeout: DispatchWorkItem?
+    private var protectionGeneration = 0
+    private var showingTouchIDError = false
+    private enum AuthenticationPause: Hashable { case application, display, session, system }
+    private var authenticationPauses = Set<AuthenticationPause>()
+    private var authenticationObservers: [(NotificationCenter, NSObjectProtocol)] = []
+    private lazy var touchID: TouchIDSession<LAContext> = {
+        let session = TouchIDSession(makeContext: { LAContext() })
+        session.onContextChanged = { [weak self] context in
+            guard let self else { return }
+            self.touchIDContext = context
+            if context != nil, self.showingTouchIDError {
+                self.showingTouchIDError = false
+                self.unlockError = nil
+            }
+        }
+        session.onAuthenticated = { [weak self] in
+            guard let self, self.state.isArmed else { return }
+            self.disarm()
+        }
+        session.onUnavailable = { [weak self] in
+            guard let self, self.state.isArmed, !self.unlockPanelVisible else { return }
+            self.showUnlockPanel(retryTouchID: false)
+        }
+        session.onPasswordRequired = { [weak self] code in
+            guard let self, self.state.isArmed else { return }
+            if !self.unlockPanelVisible { self.showUnlockPanel(retryTouchID: false) }
+            guard self.touchIDContext == nil else { return }
+            switch code {
+            case .biometryLockout:
+                self.showingTouchIDError = true
+                self.unlockError = "Touch ID is locked. Enter your Mac password."
+            case .biometryNotEnrolled:
+                self.showingTouchIDError = true
+                self.unlockError = "Touch ID is not set up. Enter your Mac password."
+            case .passcodeNotSet:
+                self.showingTouchIDError = true
+                self.unlockError = "Touch ID requires a Mac login password."
+            default: break
+            }
+        }
+        return session
+    }()
 
     let settings = Settings.shared
     private let motion = MotionSensor()
@@ -79,6 +121,7 @@ final class GuardController: ObservableObject {
         motion.onSample = { [weak self] in self?.handle(sample: $0) }
         power.onWillSleep = { [weak self] allow in self?.systemWillSleep(allow: allow) }
         power.onDidWake = { [weak self] in self?.systemDidWake() }
+        observeAuthenticationLifecycle()
     }
 
     // MARK: - Sensors on demand (armed, or settings window open for the live meter)
@@ -109,7 +152,7 @@ final class GuardController: ObservableObject {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "This Mac has no motion sensor"
-        alert.informativeText = "StayPut needs a MacBook with Apple silicon (M1 or newer). Desktop Macs like the Mac mini, iMac and Mac Studio have no motion sensor, so StayPut can't protect them."
+        alert.informativeText = "Guard needs a MacBook with Apple silicon (M1 or newer). Desktop Macs like the Mac mini, iMac and Mac Studio have no motion sensor, so Guard can't protect them."
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }
@@ -133,6 +176,7 @@ final class GuardController: ObservableObject {
             showNoMotionSensorAlert()
             return
         }
+        protectionGeneration += 1
         stopTestSound()
         acquireSensors()
         if Settings.lidSleepOptionAvailable, settings.preventLidSleep {
@@ -188,77 +232,90 @@ final class GuardController: ObservableObject {
         showUnlockPanel()
     }
 
-    // MARK: - Unlock panel (Touch ID + password, drawn inside StayPut's own lock screen)
+    // MARK: - Unlock panel (Touch ID + password, drawn inside Guard's own lock screen)
     //
     // The macOS Touch ID / password dialog can't come to the front while the lock screen
-    // blocks app switching, so StayPut never relies on it.
+    // blocks app switching, so Guard never relies on it.
 
-    func showUnlockPanel() {
+    func showUnlockPanel(retryTouchID: Bool = true) {
         guard state.isArmed else { return }
+        showingTouchIDError = false
         unlockError = nil
         scheduleUnlockTimeout()
         overlay.focus()
         unlockPanelVisible = true
+        if retryTouchID { touchID.retryIfNeeded() }
     }
 
     func hideUnlockPanel() {
         unlockPanelVisible = false
+        showingTouchIDError = false
         unlockError = nil
         unlockTimeout?.cancel()
         unlockTimeout = nil
     }
 
     /// Touch ID listens the whole time the lock screen is up: just touch the sensor.
-    /// It is shown inside StayPut's window (see TouchIDView), not as a system dialog.
+    /// It is shown inside Guard's window (see TouchIDView), not as a system dialog.
     func startTouchID() {
         stopTouchID()
-        guard state.isArmed, settings.requireAuth else { return }
-        let ctx = LAContext()
-        var error: NSError?
-        guard ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else { return }
-        touchIDContext = ctx
-        NSLog("StayPut Touch ID listening")
-        // Let the lock screen create its Touch ID view for this context first.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self, self.touchIDContext === ctx else { return }
-            ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "turn off theft protection") { ok, err in
-                DispatchQueue.main.async {
-                    guard self.touchIDContext === ctx, self.state.isArmed else { return }
-                    if ok { self.disarm(); return }
-                    NSLog("StayPut Touch ID ended: %@", String(describing: err))
-                    self.touchIDContext = nil
-                    if (err as? LAError)?.code == .biometryLockout {
-                        // Too many wrong fingers: macOS requires the password now.
-                        self.showUnlockPanel()
-                        self.unlockError = "Touch ID is locked. Enter your Mac password."
-                        return
-                    }
-                    // Wrong finger, timeout, etc.: keep listening.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                        if self.state.isArmed && self.touchIDContext == nil { self.startTouchID() }
-                    }
-                }
-            }
-        }
+        guard state.isArmed, settings.requireAuth, authenticationPauses.isEmpty, NSApp.isActive else { return }
+        touchID.start()
     }
 
     func stopTouchID() {
-        let ctx = touchIDContext
-        touchIDContext = nil
-        ctx?.invalidate()
+        touchID.stop()
+    }
+
+    func touchIDViewDidAttach(_ context: LAContext) {
+        guard state.isArmed, settings.requireAuth, authenticationPauses.isEmpty else { return }
+        touchID.viewDidAttach(context)
+    }
+
+    private func observeAuthenticationLifecycle() {
+        let appCenter = NotificationCenter.default
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        let events: [(NotificationCenter, Notification.Name, AuthenticationPause, Bool)] = [
+            (appCenter, NSApplication.willResignActiveNotification, .application, true),
+            (appCenter, NSApplication.didBecomeActiveNotification, .application, false),
+            (workspaceCenter, NSWorkspace.screensDidSleepNotification, .display, true),
+            (workspaceCenter, NSWorkspace.screensDidWakeNotification, .display, false),
+            (workspaceCenter, NSWorkspace.sessionDidResignActiveNotification, .session, true),
+            (workspaceCenter, NSWorkspace.sessionDidBecomeActiveNotification, .session, false),
+        ]
+        for (center, name, reason, pause) in events {
+            let observer = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                if pause { self?.pauseTouchID(for: reason) } else { self?.resumeTouchID(after: reason) }
+            }
+            authenticationObservers.append((center, observer))
+        }
+    }
+
+    private func pauseTouchID(for reason: AuthenticationPause) {
+        authenticationPauses.insert(reason)
+        stopTouchID()
+    }
+
+    private func resumeTouchID(after reason: AuthenticationPause) {
+        authenticationPauses.remove(reason)
+        // A fresh context is needed after foreground, display or session changes.
+        startTouchID()
     }
 
     func submitPassword(_ password: String) {
         guard state.isArmed, !password.isEmpty, !checkingPassword else { return }
         checkingPassword = true
+        showingTouchIDError = false
         unlockError = nil
         scheduleUnlockTimeout()
-        DispatchQueue.global(qos: .userInitiated).async {
+        let requestGeneration = protectionGeneration
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let ok = PasswordCheck.verify(password)
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
+                guard let self, self.state.isArmed,
+                      self.protectionGeneration == requestGeneration else { return }
                 self.checkingPassword = false
-                NSLog("StayPut password check: %@", ok ? "ok" : "rejected")
+                NSLog("Guard password check: %@", ok ? "ok" : "rejected")
                 if ok { self.disarm() } else { self.unlockError = "Wrong password" }
             }
         }
@@ -267,13 +324,17 @@ final class GuardController: ObservableObject {
     /// Hide the panel again after a minute without input.
     private func scheduleUnlockTimeout() {
         unlockTimeout?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.hideUnlockPanel() }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.touchIDContext != nil else { return }
+            self.hideUnlockPanel()
+        }
         unlockTimeout = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 60, execute: work)
     }
 
     func disarm() {
         guard state.isArmed else { return }
+        protectionGeneration += 1
         hideUnlockPanel()
         stopTouchID()
         checkingPassword = false
@@ -413,6 +474,7 @@ final class GuardController: ObservableObject {
     // MARK: - Sleep (lid closed)
 
     private func systemWillSleep(allow: @escaping () -> Void) {
+        pauseTouchID(for: .system)
         guard state.isMonitoring else { allow(); return }
         // The lid switch may flip before our 10 Hz poll sees it.
         if !lidWasClosed, LidSensor.clamshellClosed() == true {
@@ -432,6 +494,7 @@ final class GuardController: ObservableObject {
     }
 
     private func systemDidWake() {
+        authenticationPauses.remove(.system)
         guard state.isArmed else { return }
         // Sensors may need a restart after sleep.
         motion.start()

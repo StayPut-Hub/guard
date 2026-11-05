@@ -1,6 +1,8 @@
-# StayPut: theft alarm for MacBooks
+# Guard: theft alarm for MacBooks
 
-StayPut is a small menu bar app for Apple Silicon MacBooks. Before you leave your MacBook in a library or café, turn it on. StayPut covers the screen with a lock screen and watches the built-in motion sensor, the lid-angle sensor and the lid switch.
+Part of [StayPut](https://getstayput.app), small apps for your Mac.
+
+Guard is a small menu bar app for Apple Silicon MacBooks. Before you leave your MacBook in a library or café, turn it on. Guard covers the screen with a lock screen and watches the built-in motion sensor, the lid-angle sensor and the lid switch.
 
 | What happens | Reaction |
 |---|---|
@@ -13,20 +15,19 @@ StayPut is a small menu bar app for Apple Silicon MacBooks. Before you leave you
 The siren stops by itself after the time you set (default 30 s). If the MacBook keeps being moved, it starts again.
 
 ## Install
-1. Download `StayPut-macOS-v1.zip`.
-2. Extract the ZIP file.
-3. Move `StayPut.app` to your **Applications** folder.
-4. Open the application. The app isn't notarized by Apple, so the first time macOS blocks it. Go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. Alternatively, run this once in Terminal:
-   ```
-   xattr -dr com.apple.quarantine /Applications/StayPut.app
-   ```
-3. A shield icon appears in the menu bar. The Settings window opens on first launch.
+
+1. Download `Guard-macOS.zip` from the [latest release](../../releases/latest).
+2. Open the ZIP file and move `Guard.app` to your **Applications** folder.
+3. Open Guard. The app isn't notarized by Apple, so the first time macOS blocks it. Go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
+4. A shield icon appears in the menu bar. Settings open on first launch.
+
+Coming from Guard 1.0? Quit it, delete `Guard.app` and install Guard. Your settings carry over. If you used **Open at login**, switch it on again in Guard.
 
 ## Use
 
 - **Turn on:** press **⌃⌥⌘L** (Control-Option-Command-L), or click the shield in the menu bar and choose **Protect This MacBook**. Protection starts after a short countdown (default 5 s).
 - **Turn off:** just put your finger on the Touch ID sensor. Touch ID is ready the whole time the lock screen is up. Or press the shortcut (or any key, or click **Use password**) and type your Mac password. A thief who learns the shortcut still can't turn it off. If you switch off "Require Touch ID or password", the shortcut turns protection off immediately.
-- While armed, the Dock, menu bar, ⌘-Tab, Force Quit and log-out are blocked, and StayPut can't be quit.
+- While armed, the Dock, menu bar, ⌘-Tab, Force Quit and log-out are blocked, and Guard can't be quit.
 
 ## Settings
 
@@ -42,20 +43,20 @@ The siren stops by itself after the time you set (default 30 s). If the MacBook 
 
 ## Lid closed: important
 
-macOS puts a MacBook to sleep when the lid closes, and sleeping apps can't make sound. StayPut handles this in two ways:
+macOS puts a MacBook to sleep when the lid closes, and sleeping apps can't make sound. Guard handles this in two ways:
 
-- **Default:** when the lid closes, StayPut starts the siren and holds off sleep while it plays. macOS forces sleep after about 25–30 seconds.
-- **"Keep running when the lid is closed" on:** each time you turn protection on, macOS asks for your admin password once. StayPut then runs `pmset disablesleep 1`, so the Mac stays awake with the lid closed and the siren plays for its full time. Sleep is switched back on automatically when you turn protection off, or if StayPut quits or crashes.
+- **Default:** when the lid closes, Guard starts the siren and holds off sleep while it plays. macOS forces sleep after about 25–30 seconds.
+- **"Keep running when the lid is closed" on:** each time you turn protection on, macOS asks for your admin password once. Guard then runs `pmset disablesleep 1`, so the Mac stays awake with the lid closed and the siren plays for its full time. Sleep is switched back on automatically when you turn protection off, or if Guard quits or crashes.
 
 ## Compatibility
 
 - Tested on a MacBook Pro M2 Max running macOS 27.
-- Should work on all Apple Silicon MacBooks (M1–M4 and newer) with macOS 13 or later. The motion sensor and lid-angle sensor are read through undocumented interfaces. Some models (reportedly some M1 machines) may lack the lid-angle sensor. StayPut then falls back to the lid switch and doesn't detect display-angle changes. Settings shows which sensors were found.
+- Should work on all Apple Silicon MacBooks (M1–M4 and newer) with macOS 13 or later. The motion sensor and lid-angle sensor are read through undocumented interfaces. Some models (reportedly some M1 machines) may lack the lid-angle sensor. Guard then falls back to the lid switch and doesn't detect display-angle changes. Settings shows which sensors were found.
 - Intel Macs and desktop Macs (no motion sensor) are not supported.
 
 ## Limits
 
-StayPut is a deterrent, not a vault. Holding the power button for 10 seconds forces a shutdown, and nothing in software can prevent that. Keep **Find My Mac** turned on as well.
+Guard is a deterrent, not a vault. Holding the power button for 10 seconds forces a shutdown, and nothing in software can prevent that. Keep **Find My Mac** turned on as well.
 
 ## Build from source
 
@@ -65,7 +66,7 @@ Requires Xcode or the Command Line Tools (`xcode-select --install`):
 ./build.sh
 ```
 
-The app is written to `build/StayPut.app`. `./build.sh appstore` builds the sandboxed Mac App Store version; see `AppStore/APP_STORE.md`. Sources are in `Sources/`:
+The app is written to `build/Guard.app`. `./build.sh appstore` builds the sandboxed Mac App Store version. Tests: `tools/20261103_Test_*.sh`. Sources are in `Sources/`:
 
 | File | Purpose |
 |---|---|
@@ -75,4 +76,5 @@ The app is written to `build/StayPut.app`. `./build.sh appstore` builds the sand
 | `Alarm.swift` | Siren and system volume |
 | `Power.swift` | Sleep handling |
 | `HotKey.swift` | Shortcut and Touch ID |
+| `20261103_TouchIDSession.swift` | Touch ID inside the lock screen |
 | `SettingsView.swift` | Settings window |

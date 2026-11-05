@@ -54,11 +54,11 @@ final class PowerManager {
         endArmed()
         IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
                                     IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                                    "StayPut theft protection is active" as CFString, &systemAssertion)
+                                    "Guard theft protection is active" as CFString, &systemAssertion)
         if keepDisplayOn {
             IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
                                         IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                                        "StayPut lock screen" as CFString, &displayAssertion)
+                                        "Guard lock screen" as CFString, &displayAssertion)
         }
     }
 
@@ -70,14 +70,14 @@ final class PowerManager {
     /// Turns the display on (like touching the trackpad).
     func wakeDisplay() {
         var id: IOPMAssertionID = 0
-        IOPMAssertionDeclareUserActivity("StayPut warning" as CFString, kIOPMUserActiveLocal, &id)
+        IOPMAssertionDeclareUserActivity("Guard warning" as CFString, kIOPMUserActiveLocal, &id)
         if id != 0 { IOPMAssertionRelease(id) }
     }
 
     // MARK: - Keep running with the lid closed
 
     /// Runs `pmset -a disablesleep 1` as root (asks for an admin password once).
-    /// A root shell waits until StayPut disarms or quits and then turns sleep back on.
+    /// A root shell waits until Guard disarms or quits and then turns sleep back on.
     /// Returns false if the user cancelled.
     @discardableResult
     func preventLidSleep() -> Bool {

@@ -1,23 +1,23 @@
 #!/bin/bash
-# Builds StayPut.app (Apple Silicon, macOS 13+). Needs Xcode or the Command Line Tools.
+# Builds Guard.app (Apple Silicon, macOS 13+). Needs Xcode or the Command Line Tools.
 #
 #   ./build.sh            Direct-download build (ad-hoc signed, not sandboxed).
 #   ./build.sh appstore   Mac App Store build: sandboxed, no admin features.
 #                         Signed ad-hoc for local testing, unless these are set:
 #                           STORE_PROFILE=path/to/StayPut.provisionprofile
-#                         Then it signs with "Apple Distribution" and writes build/StayPut.pkg
+#                         Then it signs with "Apple Distribution" and writes build/Guard.pkg
 #                         (signed with "3rd Party Mac Developer Installer") for upload.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 MODE="${1:-direct}"
-VERSION="1.0"
+VERSION="1.1.0"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 BUNDLE_ID="app.stayput.StayPut"
 TEAM_ID="JQ6J95ZC2J"
 
-APP="build/StayPut.app"
-rm -rf "$APP" build/StayPut.pkg
+APP="build/Guard.app"
+rm -rf "$APP" build/Guard.pkg
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 FLAGS=()
@@ -27,17 +27,17 @@ swiftc -O -swift-version 5 ${FLAGS[@]+"${FLAGS[@]}"} \
   -target arm64-apple-macos13.0 \
   -framework IOKit -framework AVFoundation -framework CoreAudio -framework Carbon \
   -framework LocalAuthentication -framework ServiceManagement \
-  Sources/*.swift -o "$APP/Contents/MacOS/StayPut"
+  Sources/*.swift -o "$APP/Contents/MacOS/Guard"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>StayPut</string>
-  <key>CFBundleDisplayName</key><string>StayPut</string>
+  <key>CFBundleName</key><string>Guard</string>
+  <key>CFBundleDisplayName</key><string>Guard</string>
   <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
-  <key>CFBundleExecutable</key><string>StayPut</string>
+  <key>CFBundleExecutable</key><string>Guard</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
@@ -88,8 +88,8 @@ if [[ -n "${STORE_PROFILE:-}" ]]; then
 </plist>
 ENTS
   codesign --force --options runtime --timestamp --sign "Apple Distribution" --entitlements "$ENT" "$APP"
-  productbuild --component "$APP" /Applications --sign "3rd Party Mac Developer Installer" build/StayPut.pkg
-  echo "Built $APP and build/StayPut.pkg (ready to upload)"
+  productbuild --component "$APP" /Applications --sign "3rd Party Mac Developer Installer" build/Guard.pkg
+  echo "Built $APP and build/Guard.pkg (ready to upload)"
 else
   # Local test of the sandboxed build. The motion and lid sensors need the USB entitlement.
   cp StayPut.entitlements "$ENT"

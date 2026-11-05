@@ -37,8 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateIcon() {
         let armed = guardController.state.isArmed
-        let image = NSImage(systemSymbolName: armed ? "lock.shield.fill" : "lock.shield",
-                            accessibilityDescription: armed ? "StayPut: protected" : "StayPut")
+        let image = NSImage(systemSymbolName: armed ? "shield.fill" : "shield",
+                            accessibilityDescription: armed ? "Guard: protected" : "Guard")
         image?.isTemplate = true
         statusItem.button?.image = image
     }
@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hint.isEnabled = false
         menu.addItem(hint)
         if !guardController.motionAvailable {
-            let warn = NSMenuItem(title: "No motion sensor: StayPut needs a MacBook", action: nil, keyEquivalent: "")
+            let warn = NSMenuItem(title: "No motion sensor: Guard needs a MacBook", action: nil, keyEquivalent: "")
             warn.isEnabled = false
             menu.addItem(warn)
         }
@@ -62,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let prefs = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         prefs.target = self
         menu.addItem(prefs)
-        let quit = NSMenuItem(title: "Quit StayPut", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit Guard", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
     }
@@ -75,7 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if settingsWindow == nil {
             let hosting = NSHostingController(rootView: SettingsView(settings: settings, controller: guardController))
             let w = NSWindow(contentViewController: hosting)
-            w.title = "StayPut Settings"
+            w.title = "Guard Settings"
             w.styleMask = [.titled, .closable]
             w.isReleasedWhenClosed = false
             settingsWindow = w
